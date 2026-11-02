@@ -35,9 +35,9 @@ and restart Flow.
 Each result carries the selected UUID and HWND. Actions revalidate that identity,
 release the optional dotfiles guard, hide Flow through its API, and start a native
 worker without inherited RPC pipe handles. The worker focuses the target workspace
-before its window, retries once, and verifies Windows foreground focus. New user
-input before activation or while awaiting focus cancels the worker. GlazeWM's own
-cursor jump is accounted for during the focus commands.
+before its window, retries once, and verifies Windows foreground focus. Once selected, activation completes despite subsequent keyboard or mouse input,
+including cursor jumps between monitors. Closed windows and activation failures
+still terminate the bounded worker.
 
 Only GlazeWM-managed windows are searched. Workspace names containing whitespace,
 quotes, backslashes, or a leading hyphen are not supported by this release.
