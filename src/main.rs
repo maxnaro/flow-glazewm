@@ -70,9 +70,10 @@ fn foreground() -> u64 {
 #[cfg(windows)]
 fn release_guard() -> Result<(), Error> {
     use std::io::{Read, Write};
+    use std::os::windows::io::AsRawHandle;
     let mut session = 0;
     unsafe {
-        windows_sys::Win32::System::Threading::ProcessIdToSessionId(
+        windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId(
             std::process::id(),
             &mut session,
         );
@@ -84,9 +85,35 @@ fn release_guard() -> Result<(), Error> {
         .open(path)
     {
         Ok(mut pipe) => {
+            let mode = windows_sys::Win32::System::Pipes::PIPE_NOWAIT;
+            if unsafe {
+                windows_sys::Win32::System::Pipes::SetNamedPipeHandleState(
+                    pipe.as_raw_handle(),
+                    &mode,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                )
+            } == 0
+            {
+                return Err(std::io::Error::last_os_error().into());
+            }
             pipe.write_all(b"release\n")?;
             let mut reply = [0; 3];
-            pipe.read_exact(&mut reply)?;
+            let until = Instant::now() + Duration::from_secs(3);
+            let mut received = 0;
+            while received < reply.len() {
+                match pipe.read(&mut reply[received..]) {
+                    Ok(0) => return Err("Workspace helper disconnected".into()),
+                    Ok(n) => received += n,
+                    Err(e) if e.raw_os_error() == Some(232) => {
+                        if Instant::now() >= until {
+                            return Err("Workspace helper timed out".into());
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            }
             if &reply != b"OK\n" {
                 return Err("Workspace helper rejected handoff".into());
             }
@@ -137,12 +164,18 @@ fn run() -> Result<Value, Error> {
     let args: Vec<String> = env::args().collect();
     if args.get(1).map(String::as_str) == Some("--focus") {
         // Flow hides only after its executable action exits. Wait for that handoff.
-        let previous = args[4].parse::<u64>()?;
+        let previous = args.get(4).ok_or("Missing Flow HWND")?.parse::<u64>()?;
         let until = Instant::now() + Duration::from_secs(2);
         while foreground() == previous && Instant::now() < until {
             thread::sleep(Duration::from_millis(20));
         }
-        focus(&args[2], args[3].parse()?)?;
+        if foreground() == previous {
+            return Err("Flow did not hide before focus".into());
+        }
+        focus(
+            args.get(2).ok_or("Missing target UUID")?,
+            args.get(3).ok_or("Missing HWND")?.parse()?,
+        )?;
         return Ok(json!({}));
     }
     let input: Value = serde_json::from_str(args.get(1).ok_or("Expected Flow JSON-RPC request")?)?;
@@ -181,6 +214,29 @@ fn run() -> Result<Value, Error> {
     }
 }
 fn main() {
+    if env::args().nth(1).as_deref() == Some("--focus") {
+        if let Err(e) = run() {
+            if let Some(root) = env::var_os("LOCALAPPDATA") {
+                use std::io::Write;
+                let path = std::path::PathBuf::from(root).join("flow-glazewm.log");
+                if std::fs::metadata(&path)
+                    .map(|m| m.len() > 262144)
+                    .unwrap_or(false)
+                {
+                    let _ = std::fs::remove_file(&path);
+                }
+                if let Ok(mut log) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                {
+                    let _ = writeln!(log, "focus failed: {e}");
+                }
+            }
+            std::process::exit(1);
+        }
+        return;
+    }
     match run() {
         Ok(v) => println!("{v}"),
         Err(e) => println!(
