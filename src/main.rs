@@ -103,7 +103,12 @@ fn release_guard() -> Result<(), Error> {
             let mut received = 0;
             while received < reply.len() {
                 match pipe.read(&mut reply[received..]) {
-                    Ok(0) => return Err("Workspace helper disconnected".into()),
+                    Ok(0) => {
+                        if Instant::now() >= until {
+                            return Err("Workspace helper timed out".into());
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
                     Ok(n) => received += n,
                     Err(e) if e.raw_os_error() == Some(232) => {
                         if Instant::now() >= until {
