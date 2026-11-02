@@ -8,7 +8,10 @@ use std::{
 };
 type Error = Box<dyn std::error::Error>;
 fn request(command: &str) -> Result<Value, Error> {
-    let stream = TcpStream::connect_timeout(&"127.0.0.1:6123".parse()?, Duration::from_secs(2))?;
+    request_at(command, "127.0.0.1:6123")
+}
+fn request_at(command: &str, address: &str) -> Result<Value, Error> {
+    let stream = TcpStream::connect_timeout(&address.parse()?, Duration::from_secs(2))?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
     stream.set_write_timeout(Some(Duration::from_secs(2)))?;
     let (mut ws, _) = tungstenite::client("ws://127.0.0.1:6123", stream)?;
@@ -65,6 +68,25 @@ fn foreground() -> u64 {
 }
 #[cfg(not(windows))]
 fn foreground() -> u64 {
+    0
+}
+fn flow_foreground() -> u64 {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowTextW;
+        let handle = foreground();
+        let mut title = [0u16; 256];
+        let length = unsafe {
+            GetWindowTextW(
+                handle as *mut std::ffi::c_void,
+                title.as_mut_ptr(),
+                title.len() as i32,
+            )
+        };
+        if length > 0 && String::from_utf16_lossy(&title[..length as usize]) == "Flow.Launcher" {
+            return handle;
+        }
+    }
     0
 }
 #[cfg(windows)]
@@ -192,10 +214,10 @@ fn run() -> Result<Value, Error> {
         // Flow hides only after its executable action exits. Wait for that handoff.
         let previous = args.get(4).ok_or("Missing Flow HWND")?.parse::<u64>()?;
         let until = Instant::now() + Duration::from_secs(2);
-        while foreground() == previous && Instant::now() < until {
+        while previous != 0 && flow_foreground() == previous && Instant::now() < until {
             thread::sleep(Duration::from_millis(20));
         }
-        if foreground() == previous {
+        if previous != 0 && flow_foreground() == previous {
             return Err("Flow did not hide before focus".into());
         }
         focus(
@@ -234,7 +256,7 @@ fn run() -> Result<Value, Error> {
                     "--focus",
                     parameters[0].as_str().ok_or("Missing id")?,
                     &parameters[1].as_u64().ok_or("Missing handle")?.to_string(),
-                    &foreground().to_string(),
+                    &flow_foreground().to_string(),
                     &last_input().to_string(),
                 ])
                 .stdin(Stdio::null())
@@ -282,6 +304,38 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn fake_reply(reply: Value) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        thread::spawn(move || {
+            let (socket, _) = listener.accept().unwrap();
+            let mut ws = tungstenite::accept(socket).unwrap();
+            assert_eq!(ws.read().unwrap().to_text().unwrap(), "query workspaces");
+            ws.send(tungstenite::Message::Text(reply.to_string().into()))
+                .unwrap();
+        });
+        address
+    }
+    #[test]
+    fn ipc_success() {
+        let address = fake_reply(json!({"success":true,"data":{"workspaces":[]}}));
+        assert!(request_at("query workspaces", &address).is_ok());
+    }
+    #[test]
+    fn ipc_rejection() {
+        let address = fake_reply(json!({"success":false,"error":"fixture rejection"}));
+        assert!(request_at("query workspaces", &address)
+            .unwrap_err()
+            .to_string()
+            .contains("fixture rejection"));
+    }
+    #[test]
+    fn ipc_disconnect() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        drop(listener);
+        assert!(request_at("query workspaces", &address).is_err());
+    }
     #[test]
     fn fuzzy() {
         assert!(matches("outlook", "Inbox - Outlook olk"));
