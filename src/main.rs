@@ -189,6 +189,7 @@ fn last_input() -> u32 {
 }
 fn focus(id: &str, handle: u64, input_time: u32) -> Result<(), Error> {
     let id = uuid::Uuid::parse_str(id)?.to_string();
+    let mut input_time = input_time;
     for _ in 0..2 {
         if last_input() != input_time {
             return Err("Focus cancelled by new user input".into());
@@ -214,7 +215,9 @@ fn focus(id: &str, handle: u64, input_time: u32) -> Result<(), Error> {
                 ShowWindowAsync(hwnd, SW_RESTORE);
             }
         }
+        // Workspace focus can jump the cursor and update LastInputInfo.
         request(&format!("command focus --container-id {id}"))?;
+        input_time = last_input();
         let until = Instant::now() + Duration::from_secs(1);
         while Instant::now() < until {
             if last_input() != input_time {
