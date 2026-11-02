@@ -75,6 +75,22 @@ fn flow_foreground() -> u64 {
     {
         use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowTextW;
         let handle = foreground();
+        let hwnd = handle as *mut std::ffi::c_void;
+        if unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindowVisible(hwnd) } == 0 {
+            return 0;
+        }
+        let mut cloaked = 0u32;
+        unsafe {
+            windows_sys::Win32::Graphics::Dwm::DwmGetWindowAttribute(
+                hwnd,
+                14,
+                &mut cloaked as *mut u32 as *mut std::ffi::c_void,
+                4,
+            );
+        }
+        if cloaked != 0 {
+            return 0;
+        }
         let mut title = [0u16; 256];
         let length = unsafe {
             GetWindowTextW(
@@ -263,7 +279,7 @@ fn run() -> Result<Value, Error> {
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()?;
-            Ok(json!({"method":"Flow.Launcher.HideApp","parameters":[]}))
+            Ok(json!({"method":"Flow.Launcher.HideMainWindow","parameters":[]}))
         }
         "context_menu" => Ok(json!({"result":[]})),
         _ => Err("Unknown request".into()),
