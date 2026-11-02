@@ -1,0 +1,19 @@
+name: Windows build
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist
+          Copy-Item target/release/flow-glazewm.exe,plugin.json,icon.png dist
+          Compress-Archive dist/* flow-glazewm.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flow-glazewm-windows-x64
+          path: flow-glazewm.zip

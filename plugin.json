@@ -1,0 +1,12 @@
+{
+ "ID":"8B138D1FF90C44E19FA2920313C4E8C2",
+ "ActionKeywords":["*","gw"],
+ "Name":"GlazeWM Windows",
+ "Description":"Search all GlazeWM workspaces and focus the selected window in place.",
+ "Author":"maxnaro",
+ "Version":"0.1.0",
+ "Language":"executable",
+ "ExecuteFileName":"flow-glazewm.exe",
+ "Website":"https://github.com/maxnaro/flow-glazewm",
+ "IcoPath":"icon.png"
+}
