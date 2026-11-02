@@ -198,10 +198,13 @@ fn focus(id: &str, handle: u64, input_time: u32) -> Result<(), Error> {
             .find(|w| w["id"] == id && w["handle"].as_u64() == Some(handle))
             .ok_or("Selected window has closed")?;
         let workspace = target["workspace"].as_str().ok_or("Missing workspace")?;
-        if workspace.contains(['"', '\\', '\n', '\r']) {
+        if workspace.starts_with('-')
+            || workspace.chars().any(char::is_whitespace)
+            || workspace.contains(['"', '\\'])
+        {
             return Err("Unsupported workspace name".into());
         }
-        request(&format!("command focus --workspace \"{workspace}\""))?;
+        request(&format!("command focus --workspace {workspace}"))?;
         #[cfg(windows)]
         unsafe {
             use windows_sys::Win32::UI::WindowsAndMessaging::*;
