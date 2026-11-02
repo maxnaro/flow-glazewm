@@ -8,4 +8,4 @@ serde_json = "1"
 tungstenite = "0.28"
 uuid = "1"
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_RemoteDesktop"] }
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_RemoteDesktop", "Win32_UI_Input_KeyboardAndMouse"] }

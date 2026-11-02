@@ -127,10 +127,28 @@ fn release_guard() -> Result<(), Error> {
 fn release_guard() -> Result<(), Error> {
     Ok(())
 }
-fn focus(id: &str, handle: u64) -> Result<(), Error> {
+#[cfg(windows)]
+fn last_input() -> u32 {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    unsafe {
+        GetLastInputInfo(&mut info);
+    }
+    info.dwTime
+}
+#[cfg(not(windows))]
+fn last_input() -> u32 {
+    0
+}
+fn focus(id: &str, handle: u64, input_time: u32) -> Result<(), Error> {
     let id = uuid::Uuid::parse_str(id)?.to_string();
-    release_guard()?;
     for _ in 0..2 {
+        if last_input() != input_time {
+            return Err("Focus cancelled by new user input".into());
+        }
         let all = snapshot()?;
         let target = all
             .iter()
@@ -152,6 +170,9 @@ fn focus(id: &str, handle: u64) -> Result<(), Error> {
         request(&format!("command focus --container-id {id}"))?;
         let until = Instant::now() + Duration::from_secs(1);
         while Instant::now() < until {
+            if last_input() != input_time {
+                return Err("Focus cancelled by new user input".into());
+            }
             if foreground() == handle {
                 return Ok(());
             }
@@ -175,6 +196,7 @@ fn run() -> Result<Value, Error> {
         focus(
             args.get(2).ok_or("Missing target UUID")?,
             args.get(3).ok_or("Missing HWND")?.parse()?,
+            args.get(5).ok_or("Missing input timestamp")?.parse()?,
         )?;
         return Ok(json!({}));
     }
@@ -196,12 +218,19 @@ fn run() -> Result<Value, Error> {
         }
         "focus" => {
             release_guard()?;
-            Command::new(env::current_exe()?)
+            let mut worker = Command::new(env::current_exe()?);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                worker.creation_flags(0x08000000);
+            }
+            worker
                 .args([
                     "--focus",
                     parameters[0].as_str().ok_or("Missing id")?,
                     &parameters[1].as_u64().ok_or("Missing handle")?.to_string(),
                     &foreground().to_string(),
+                    &last_input().to_string(),
                 ])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
