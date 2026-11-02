@@ -171,29 +171,9 @@ fn release_guard() -> Result<(), Error> {
 fn release_guard() -> Result<(), Error> {
     Ok(())
 }
-#[cfg(windows)]
-fn last_input() -> u32 {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
-    let mut info = LASTINPUTINFO {
-        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
-        dwTime: 0,
-    };
-    unsafe {
-        GetLastInputInfo(&mut info);
-    }
-    info.dwTime
-}
-#[cfg(not(windows))]
-fn last_input() -> u32 {
-    0
-}
-fn focus(id: &str, handle: u64, input_time: u32) -> Result<(), Error> {
+fn focus(id: &str, handle: u64) -> Result<(), Error> {
     let id = uuid::Uuid::parse_str(id)?.to_string();
-    let mut input_time = input_time;
     for _ in 0..2 {
-        if last_input() != input_time {
-            return Err("Focus cancelled by new user input".into());
-        }
         let all = snapshot()?;
         let target = all
             .iter()
@@ -215,14 +195,9 @@ fn focus(id: &str, handle: u64, input_time: u32) -> Result<(), Error> {
                 ShowWindowAsync(hwnd, SW_RESTORE);
             }
         }
-        // Workspace focus can jump the cursor and update LastInputInfo.
         request(&format!("command focus --container-id {id}"))?;
-        input_time = last_input();
         let until = Instant::now() + Duration::from_secs(1);
         while Instant::now() < until {
-            if last_input() != input_time {
-                return Err("Focus cancelled by new user input".into());
-            }
             if foreground() == handle {
                 return Ok(());
             }
@@ -246,7 +221,6 @@ fn run() -> Result<Value, Error> {
         focus(
             args.get(2).ok_or("Missing target UUID")?,
             args.get(3).ok_or("Missing HWND")?.parse()?,
-            args.get(5).ok_or("Missing input timestamp")?.parse()?,
         )?;
         return Ok(json!({}));
     }
@@ -276,12 +250,11 @@ fn run() -> Result<Value, Error> {
                 use windows_sys::Win32::Foundation::CloseHandle;
                 use windows_sys::Win32::System::Threading::*;
                 let command = format!(
-                    "\"{}\" --focus {} {} {} {}",
+                    "\"{}\" --focus {} {} {}",
                     env::current_exe()?.display(),
                     id,
                     handle,
-                    flow_foreground(),
-                    last_input()
+                    flow_foreground()
                 );
                 let mut wide: Vec<u16> = command.encode_utf16().chain(Some(0)).collect();
                 let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
@@ -314,7 +287,7 @@ fn run() -> Result<Value, Error> {
             #[cfg(not(windows))]
             {
                 Command::new(env::current_exe()?)
-                    .args(["--focus", &id, &handle.to_string(), "0", "0"])
+                    .args(["--focus", &id, &handle.to_string(), "0"])
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
