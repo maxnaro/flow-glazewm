@@ -1,8 +1,9 @@
 use serde_json::{json, Value};
+#[cfg(not(windows))]
+use std::process::{Command, Stdio};
 use std::{
     env,
     net::TcpStream,
-    process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -264,24 +265,58 @@ fn run() -> Result<Value, Error> {
         }
         "focus" => {
             release_guard()?;
-            let mut worker = Command::new(env::current_exe()?);
+            let id =
+                uuid::Uuid::parse_str(parameters[0].as_str().ok_or("Missing id")?)?.to_string();
+            let handle = parameters[1].as_u64().ok_or("Missing handle")?;
             #[cfg(windows)]
             {
-                use std::os::windows::process::CommandExt;
-                worker.creation_flags(0x08000000);
+                use windows_sys::Win32::Foundation::CloseHandle;
+                use windows_sys::Win32::System::Threading::*;
+                let command = format!(
+                    "\"{}\" --focus {} {} {} {}",
+                    env::current_exe()?.display(),
+                    id,
+                    handle,
+                    flow_foreground(),
+                    last_input()
+                );
+                let mut wide: Vec<u16> = command.encode_utf16().chain(Some(0)).collect();
+                let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
+                startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+                let mut child: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+                // No inherited handles: otherwise Flow can wait on the worker's
+                // inherited output pipe before processing HideMainWindow.
+                let ok = unsafe {
+                    CreateProcessW(
+                        std::ptr::null(),
+                        wide.as_mut_ptr(),
+                        std::ptr::null(),
+                        std::ptr::null(),
+                        0,
+                        CREATE_NO_WINDOW,
+                        std::ptr::null(),
+                        std::ptr::null(),
+                        &startup,
+                        &mut child,
+                    )
+                };
+                if ok == 0 {
+                    return Err(std::io::Error::last_os_error().into());
+                }
+                unsafe {
+                    CloseHandle(child.hThread);
+                    CloseHandle(child.hProcess);
+                }
             }
-            worker
-                .args([
-                    "--focus",
-                    parameters[0].as_str().ok_or("Missing id")?,
-                    &parameters[1].as_u64().ok_or("Missing handle")?.to_string(),
-                    &flow_foreground().to_string(),
-                    &last_input().to_string(),
-                ])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()?;
+            #[cfg(not(windows))]
+            {
+                Command::new(env::current_exe()?)
+                    .args(["--focus", &id, &handle.to_string(), "0", "0"])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()?;
+            }
             Ok(json!({"method":"Flow.Launcher.HideMainWindow","parameters":[]}))
         }
         "context_menu" => Ok(json!({"result":[]})),
