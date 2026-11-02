@@ -5,6 +5,8 @@ Search all managed workspaces by window title or process name. Select a result t
 switch to its existing workspace and focus that exact window. Existing windows
 are never moved. Minimized targets are restored.
 
+The workspace-and-search icon is an original SVG in the amber Chocolatier palette.
+
 ## Install
 
 Download `flow-glazewm.zip` and `Install.ps1` from the GitHub release, then run:

@@ -262,7 +262,7 @@ fn run() -> Result<Value, Error> {
                 if title.is_empty() || !matches(query, &format!("{title} {process}")) {
                     continue;
                 }
-                results.push(json!({"Title":title,"SubTitle":format!("Running: {process} • Workspace {}",w["workspace"].as_str().unwrap_or("")),"Score":100,"IcoPath":"icon.png","JsonRPCAction":{"method":"focus","parameters":[w["id"],w["handle"]]}}));
+                results.push(json!({"Title":title,"SubTitle":format!("Running: {process} • Workspace {}",w["workspace"].as_str().unwrap_or("")),"Score":100,"IcoPath":"icon.svg","JsonRPCAction":{"method":"focus","parameters":[w["id"],w["handle"]]}}));
             }
             Ok(json!({"result":results}))
         }

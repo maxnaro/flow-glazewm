@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>GlazeWM Windows: workspace window search</title>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#221a0f"/>
+  <rect x="9" y="10" width="39" height="31" rx="4" fill="#51412c" stroke="#8b7355" stroke-width="2"/>
+  <rect x="14" y="18" width="38" height="32" rx="4" fill="#3b2c1a" stroke="#f4aa2b" stroke-width="3"/>
+  <path d="M15 27h36M30 28v20M31 38h19" fill="none" stroke="#8b7355" stroke-width="2"/>
+  <rect x="18" y="31" width="8" height="13" rx="1.5" fill="#f4aa2b"/>
+  <circle cx="45" cy="42" r="10" fill="#221a0f" stroke="#221a0f" stroke-width="5"/>
+  <circle cx="45" cy="42" r="9" fill="none" stroke="#f3e2bd" stroke-width="3.5"/>
+  <path d="m52 49 7 7" fill="none" stroke="#f4aa2b" stroke-width="5" stroke-linecap="round"/>
+</svg>

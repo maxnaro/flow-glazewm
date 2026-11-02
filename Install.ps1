@@ -12,7 +12,7 @@ if (-not (Test-Path -LiteralPath $settingsPath)) {throw 'Flow settings not found
 $unpack=Join-Path $env:TEMP ('flow-glazewm-'+[guid]::NewGuid())
 try {
     Expand-Archive -LiteralPath $PackagePath -DestinationPath $unpack
-    foreach($name in @('plugin.json','flow-glazewm.exe','icon.png')) {
+    foreach($name in @('plugin.json','flow-glazewm.exe','icon.svg')) {
         if(-not (Test-Path -LiteralPath (Join-Path $unpack $name))) {throw "Incomplete package: $name"}
     }
     $plugin=Get-Content (Join-Path $unpack 'plugin.json') -Raw | ConvertFrom-Json
@@ -23,6 +23,13 @@ try {
     $backup=Join-Path $FlowData ('Backups\glazewm-'+(Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
     $destination=Join-Path $FlowData ("Plugins\GlazeWM Windows-$($plugin.Version)")
+    # Reuse an existing folder for this ID so upgrades cannot load duplicate IDs.
+    foreach($folder in @(Get-ChildItem (Join-Path $FlowData 'Plugins') -Directory -ErrorAction SilentlyContinue)) {
+        $manifestPath=Join-Path $folder.FullName 'plugin.json'
+        if(-not (Test-Path -LiteralPath $manifestPath)){continue}
+        try {$existing=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json} catch {continue}
+        if($existing.ID -eq $plugin.ID){$destination=$folder.FullName;break}
+    }
     if(Test-Path $destination){Copy-Item -LiteralPath $destination -Destination $backup -Recurse}
     Copy-Item -LiteralPath $settingsPath -Destination $backup
     foreach($process in $running){Stop-Process -Id $process.Id -Force}
